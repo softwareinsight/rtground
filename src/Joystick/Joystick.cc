@@ -42,6 +42,7 @@ const char* Joystick::_vtolTXModeSettingsKey =          "TXMode_VTOL";
 const char* Joystick::_submarineTXModeSettingsKey =     "TXMode_Submarine";
 
 const char* Joystick::_buttonActionNone =               QT_TR_NOOP("No Action");
+const char* Joystick::_servo =                          QT_TR_NOOP("Servo");
 const char* Joystick::_buttonActionArm =                QT_TR_NOOP("Arm");
 const char* Joystick::_buttonActionDisarm =             QT_TR_NOOP("Disarm");
 const char* Joystick::_buttonActionToggleArm =          QT_TR_NOOP("Toggle Arm");
@@ -99,6 +100,23 @@ AssignableButtonAction::AssignableButtonAction(QObject* parent, QString action_,
 {
 }
 
+
+
+QVariantMap Joystick::getButtonSettings(int buttonIndex) {
+    if (buttonIndex >= 0 && buttonIndex < _buttonSettingsList.size()) {
+        return _buttonSettingsList[buttonIndex].toVariantMap();
+    }
+    return QVariantMap();
+}
+
+void Joystick::setButtonSettings(int buttonIndex, const QVariantMap& settings) {
+    if (buttonIndex >= 0 && buttonIndex < _buttonSettingsList.size()) {
+        _buttonSettingsList[buttonIndex].fromVariantMap(settings);
+        // Save settings or emit signal to notify changes
+    }
+}
+
+
 Joystick::Joystick(const QString& name, int axisCount, int buttonCount, int hatCount, MultiVehicleManager* multiVehicleManager)
     : _name(name)
     , _axisCount(axisCount)
@@ -107,6 +125,7 @@ Joystick::Joystick(const QString& name, int axisCount, int buttonCount, int hatC
     , _hatButtonCount(4 * hatCount)
     , _totalButtonCount(_buttonCount+_hatButtonCount)
     , _multiVehicleManager(multiVehicleManager)
+    , _isServoActionSelected(false)
 {
     qRegisterMetaType<GRIPPER_ACTIONS>();
 
@@ -119,6 +138,9 @@ Joystick::Joystick(const QString& name, int axisCount, int buttonCount, int hatC
     for (int i = 0; i < _totalButtonCount; i++) {
         _rgButtonValues[i] = BUTTON_UP;
         _buttonActionArray.append(nullptr);
+    }
+    for (int i = 0; i < _totalButtonCount; ++i) {
+        _buttonSettingsList.append(ButtonSettings());
     }
     _buildActionList(_multiVehicleManager->activeVehicle());
     _updateTXModeSettingsKey(_multiVehicleManager->activeVehicle());
@@ -150,6 +172,47 @@ Joystick::~Joystick()
         }
     }
 }
+
+
+bool Joystick::isServoActionSelected() const {
+    return _isServoActionSelected;
+}
+
+void Joystick::setIsServoActionSelected(bool selected) {
+    if (_isServoActionSelected != selected) {
+        _isServoActionSelected = selected;
+        emit isServoActionSelectedChanged();
+    }
+}
+
+
+
+void Joystick::moveServo(int servoNumber, int pwmValue) {
+    if (!_activeVehicle || !_activeVehicle->joystickEnabled()) {
+        qCWarning(JoystickLog) << "No active vehicle or joystick is disabled";
+        return;
+    }
+
+    if (servoNumber < 1 || servoNumber > 16) {
+        qCWarning(JoystickLog) << "Invalid servo number:" << servoNumber;
+        return;
+    }
+    if (pwmValue < 800 || pwmValue > 2000) {
+        qCWarning(JoystickLog) << "Invalid PWM value:" << pwmValue;
+        return;
+    }
+
+    qCDebug(JoystickLog) << "Moving servo" << servoNumber << "to PWM" << pwmValue;
+
+    _activeVehicle->sendMavCommand(_activeVehicle->defaultComponentId(),
+                                   MAV_CMD_DO_SET_SERVO,
+                                   true,
+                                   servoNumber,
+                                   pwmValue,
+                                   0, 0, 0, 0, 0);
+}
+
+
 
 void Joystick::_setDefaultCalibration(void) {
     QSettings settings;
@@ -590,6 +653,14 @@ void Joystick::_handleButtons()
                         qCDebug(JoystickLog) << "Repeat button triggered" << buttonIndex << buttonAction;
                         _executeButtonAction(buttonAction, true);
                     }
+                }
+
+
+                QVariantMap buttonSettings = getButtonSettings(buttonIndex);
+                if (buttonSettings.contains("servoNumber")) {
+                    int servoNumber = buttonSettings["servoNumber"].toInt();
+                    int pwmValue = buttonSettings["pwmValue"].toInt();
+                    moveServo(servoNumber, pwmValue);
                 }
             }
             //-- Flag it as processed
@@ -1127,6 +1198,7 @@ void Joystick::_buildActionList(Vehicle* activeVehicle)
     _availableActionTitles.clear();
     //-- Available Actions
     _assignableButtonActions.append(new AssignableButtonAction(this, _buttonActionNone));
+    _assignableButtonActions.append(new AssignableButtonAction(this, _servo));
     _assignableButtonActions.append(new AssignableButtonAction(this, _buttonActionArm));
     _assignableButtonActions.append(new AssignableButtonAction(this, _buttonActionDisarm));
     _assignableButtonActions.append(new AssignableButtonAction(this, _buttonActionToggleArm));

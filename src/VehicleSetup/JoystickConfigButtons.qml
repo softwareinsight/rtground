@@ -44,6 +44,13 @@ ColumnLayout {
             wrapMode:               Text.WordWrap
             text:                   qsTr("Assigning the same action to multiple buttons requires the press of all those buttons for the action to be taken. This is useful to prevent accidental button presses for critical actions like Arm or Emergency Stop.")
         }
+
+        QGCLabel {
+            Layout.preferredWidth:  parent.width
+            wrapMode:               Text.WordWrap
+            text:                   qsTr("Joystick Buttons Assignment")
+        }
+
         Flow {
             id:                     buttonFlow
             Layout.preferredWidth:  parent.width
@@ -73,9 +80,10 @@ ColumnLayout {
                     }
                     QGCComboBox {
                         id:                         buttonActionCombo
-                        width:                      ScreenTools.defaultFontPixelWidth * 26
+                        width:                      ScreenTools.defaultFontPixelWidth * 16
                         model:                      _activeJoystick ? _activeJoystick.assignableActionTitles : []
                         sizeToContents:             true
+                        property int  servoPopupIndex: 0
 
                         function _findCurrentButtonAction() {
                             if(_activeJoystick) {
@@ -83,12 +91,46 @@ ColumnLayout {
                                 if(i < 0) i = 0
                                 currentIndex = i
                             }
+                            settingsButton.enabled = (currentText === "Servo");
                         }
 
                         Component.onCompleted:  _findCurrentButtonAction()
                         onModelChanged:         _findCurrentButtonAction()
-                        onActivated:            _activeJoystick.setButtonAction(modelData, textAt(index))
+                        onActivated: {
+                                _activeJoystick.setButtonAction(modelData, textAt(index))
+                                settingsButton.enabled = (textAt(index) === "Servo");
+                        }
                     }
+
+
+                    function openServoSettingPopup(buttonIndex){
+                        var buttonSettings = _activeJoystick.getButtonSettings(buttonIndex)
+                        settingsPopup.servoNumber = buttonSettings.servoNumber;
+                        settingsPopup.pwmValue = buttonSettings.pwmValue;
+                        settingsPopup.repTime = buttonSettings.repTime;
+                        settingsPopup.delay = buttonSettings.delay;
+                        settingsPopup.open();
+                    }
+
+                    function showButtonSettingsPopup(buttonIndex) {
+                        var component = Qt.createComponent("qrc:/src/VehicleSetup/ButtonSettingsPopup.qml");
+                        var popup = component.createObject(parent, {"buttonIndex": buttonIndex});
+                        popup.open();
+                    }
+
+                    QGCButton {
+                        id: settingsButton
+                        text: qsTr("Settings")
+                        primary: true
+                        property int buttonIndex: index
+                        width: ScreenTools.defaultFontPixelWidth * 10
+                        height: ScreenTools.defaultFontPixelHeight * 1.7
+                        onClicked: showButtonSettingsPopup(buttonIndex)
+                        enabled: false
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+
                     QGCCheckBox {
                         id:                         repeatCheck
                         text:                       qsTr("Repeat")
@@ -110,6 +152,7 @@ ColumnLayout {
                 }
             }
         }
+
     }
     Column {
         id:         buttonCol

@@ -88,6 +88,35 @@ public:
         ThrottleModeMax
     } ThrottleMode_t;
 
+
+    struct ButtonSettings {
+        int servoNumber;
+        int pwmValue;
+        int repTime;
+        int delay;
+
+        ButtonSettings(int servo = 0, int pwm = 800, int rep = 0, int del = 0)
+            : servoNumber(servo), pwmValue(pwm), repTime(rep), delay(del) {}
+
+
+
+        void fromVariantMap(const QVariantMap& map) {
+            servoNumber = map.value("servoNumber", 0).toInt();
+            pwmValue = map.value("pwmValue", 0).toInt();
+            repTime = map.value("repTime", 0).toInt();
+            delay = map.value("delay", 0).toInt();
+        }
+
+        QVariantMap toVariantMap() const {
+            QVariantMap map;
+            map.insert("servoNumber", servoNumber);
+            map.insert("pwmValue", pwmValue);
+            map.insert("repTime", repTime);
+            map.insert("delay", delay);
+            return map;
+        }
+    };
+
     Q_PROPERTY(QString  name                    READ name                   CONSTANT)
     Q_PROPERTY(bool     calibrated              MEMBER _calibrated          NOTIFY calibratedChanged)
     Q_PROPERTY(int      totalButtonCount        READ totalButtonCount       CONSTANT)
@@ -113,11 +142,15 @@ public:
     Q_PROPERTY(float    exponential             READ exponential            WRITE setExponential        NOTIFY exponentialChanged)
     Q_PROPERTY(bool     accumulator             READ accumulator            WRITE setAccumulator        NOTIFY accumulatorChanged)
     Q_PROPERTY(bool     circleCorrection        READ circleCorrection       WRITE setCircleCorrection   NOTIFY circleCorrectionChanged)
+    Q_PROPERTY(bool     isServoActionSelected   READ isServoActionSelected  WRITE setIsServoActionSelected NOTIFY isServoActionSelectedChanged)
+
 
     Q_INVOKABLE void    setButtonRepeat     (int button, bool repeat);
     Q_INVOKABLE bool    getButtonRepeat     (int button);
     Q_INVOKABLE void    setButtonAction     (int button, const QString& action);
     Q_INVOKABLE QString getButtonAction     (int button);
+    Q_INVOKABLE QVariantMap getButtonSettings(int buttonIndex);
+    Q_INVOKABLE void setButtonSettings(int buttonIndex, const QVariantMap& settings);
 
     // Property accessors
 
@@ -139,6 +172,11 @@ public:
 
     void setFunctionAxis(AxisFunction_t function, int axis);
     int getFunctionAxis(AxisFunction_t function);
+
+
+    bool isServoActionSelected() const;
+    void setIsServoActionSelected(bool selected);
+    void moveServo(int servoNumber, int pwmValue);
 
     void stop();
 
@@ -218,6 +256,8 @@ signals:
     void setVtolInFwdFlight         (bool set);
     void setFlightMode              (const QString& flightMode);
     void emergencyStop              ();
+
+    void isServoActionSelectedChanged();
     /**
      * @brief Send MAV_CMD_DO_GRIPPER command to the vehicle
      * 
@@ -252,6 +292,9 @@ private:
     virtual bool _getButton (int i)      = 0;
     virtual int  _getAxis   (int i)      = 0;
     virtual bool _getHat    (int hat,int i) = 0;
+
+
+    QVector<ButtonSettings> _buttonSettingsList;
 
     void _updateTXModeSettingsKey(Vehicle* activeVehicle);
     int _mapFunctionMode(int mode, int function);
@@ -336,6 +379,7 @@ private:
     static const char* _submarineTXModeSettingsKey;
 
     static const char* _buttonActionNone;
+    static const char* _servo;
     static const char* _buttonActionArm;
     static const char* _buttonActionDisarm;
     static const char* _buttonActionToggleArm;
@@ -361,6 +405,8 @@ private:
     static const char* _buttonActionEmergencyStop;
     static const char* _buttonActionGripperGrab;
     static const char* _buttonActionGripperRelease;
+
+    bool _isServoActionSelected = false;
 
 
 private slots:
